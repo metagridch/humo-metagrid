@@ -57,7 +57,7 @@ class Response {
         // init API
         $api = new API($dbh, $user, $humo_option);
         try {
-            self::ok($api->getPeronList($tree->tree_id, $tree->tree_prefix, $start, $limit));
+            self::ok($api->getPeronList($tree->tree_id, $start, $limit));
         } catch (\Exception $exception) {
             self::serverError();
         }
@@ -159,27 +159,26 @@ class API {
      * @return false|PDOStatement
      */
     function getPersons(int $start, int $limit, int $tree ) {
-        $query = "SELECT pers_indexnr, pers_gedcomnumber, pers_own_code, ".
-                    "pers_firstname, pers_prefix, pers_lastname, pers_patronym, ".
-                    "pers_birth_date, pers_death_date, pers_text ".
-                    "FROM humo_persons ".
-			        "WHERE pers_tree_id=" . $tree ." ".
-                    "AND  CHAR_LENGTH(pers_firstname) > ".$this->minLength. " ".
-                    "AND CHAR_LENGTH(pers_lastname) > ".$this->minLength. " " .
-                    "Limit $limit OFFSET $start";
+        $query = "SELECT pers_tree_id,pers_famc,pers_fams, pers_gedcomnumber, pers_own_code, ".
+            "pers_firstname, pers_prefix, pers_lastname, pers_patronym, ".
+            "pers_birth_date, pers_death_date, pers_text ".
+            "FROM humo_persons ".
+            "WHERE pers_tree_id=" . $tree ." ".
+            "AND  CHAR_LENGTH(pers_firstname) > ".$this->minLength. " ".
+            "AND CHAR_LENGTH(pers_lastname) > ".$this->minLength. " " .
+            "Limit $limit OFFSET $start";
         return $this->db->query($query);
     }
 
     /**
      * Get a collection of persons
      * @param int $tree
-     * @param string $treePrefix
      * @param int $start
      * @param int $limit
      * @return array
      * @throws Exception
      */
-    function getPeronList(int $tree, string $treePrefix, int $start = 0, int $limit = 100): array {
+    function getPeronList(int $tree, int $start = 0, int $limit = 100): array {
         $data = [];
         $persons = $this->getPersons($start, $limit, $tree)->fetchAll(PDO::FETCH_OBJ);
         foreach($persons as $person) {
@@ -192,7 +191,7 @@ class API {
                 $tmpData['last_name'] = trim(implode(" ",[str_replace("_","", $person->pers_prefix), $person->pers_lastname]));
                 $tmpData['birth_date'] = $person->pers_birth_date;
                 $tmpData['death_date'] = $person->pers_death_date;
-                $tmpData['url'] = $this->getUrl($person->pers_indexnr, $person->pers_gedcomnumber, $treePrefix);
+                $tmpData['url'] = $this->getUrl($person->pers_tree_id, $person->pers_famc, $person->pers_fams, $person->pers_gedcomnumber);
                 $tmpData['links'] = $this->extractUrls($person->pers_text);
                 $data[] = $tmpData;
             }
@@ -202,20 +201,40 @@ class API {
 
     /**
      * Generate a uri for a specific person
-     * Copied from humo-gen
-     * @param string $familyId
-     * @param string $persId
-     * @param string $treePrefix
+     * Copied from humo-gen include/person_cls.php -> person_url2
+     * @since v1.1 (2022-01-19)
+     * @param int $pers_tree_id
+     * @param string $pers_famc
+     * @param string $pers_fams
+     * @param string $pers_gedcomnumber
      * @return string
      */
-    function getUrl(string $familyId, string $persId, string $treePrefix): string {
-        $position = strrpos($_SERVER['PHP_SELF'], '/');
-        $uri_path = substr($_SERVER['PHP_SELF'], 0, $position);
-        if ($this->humoOption["url_rewrite"] == "j") {
-            return $uri_path . '/family/' . $treePrefix . '/' . $familyId . '/' . $persId . '/';
-        } else {
-            return $uri_path . '/family.php?database=' . $treePrefix . '&id=' . $familyId . '&main_person=' . $persId;
+    function getUrl(int $pers_tree_id, string $pers_famc, string $pers_fams, string $pers_gedcomnumber=''): string{
+        global $humo_option, $uri_path;
+
+        $pers_family='';
+        if ($pers_famc){ $pers_family=$pers_famc; }
+        if ($pers_fams){
+            $pers_fams=explode(';',$pers_fams);
+            $pers_family=$pers_fams[0];
         }
+
+        if (CMS_SPECIFIC=='Joomla'){
+            $url='index.php?option=com_humo-gen&amp;task=family&amp;tree_id='.$pers_tree_id.'&amp;id='.$pers_family;
+            if ($pers_gedcomnumber) $url.='&amp;main_person='.$pers_gedcomnumber;
+        }
+        elseif ($humo_option["url_rewrite"]=="j"){
+            // *** $uri_path made in header.php ***
+            //$url=$uri_path.'family/'.$pers_tree_id.'/'.$pers_family.'/';
+            //if ($pers_gedcomnumber) $url.=$pers_gedcomnumber.'/';
+            $url=$uri_path.'family/'.$pers_tree_id.'/'.$pers_family;
+            if ($pers_gedcomnumber) $url.='?main_person='.$pers_gedcomnumber;
+        }
+        else{
+            $url=CMS_ROOTPATH.'family.php?tree_id='.$pers_tree_id.'&amp;id='.$pers_family;
+            if ($pers_gedcomnumber) $url.='&amp;main_person='.$pers_gedcomnumber;
+        }
+        return $url;
     }
 
     /**
