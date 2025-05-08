@@ -41,12 +41,14 @@ class Response {
         global $dbh, $user, $humo_option;
         $user = $humo_option = [];
         include_once(CMS_ROOTPATH . "include/db_login.php"); //Inloggen database.
-        include_once(CMS_ROOTPATH . "include/settings_global.php"); //Variables
-        include_once(CMS_ROOTPATH . "include/settings_user.php"); // USER variables
-        include_once(CMS_ROOTPATH . "include/db_functions_cls.php");
+        include_once(CMS_ROOTPATH . "include/generalSettings.php");
+        include_once(CMS_ROOTPATH . "include/dbFunctions.php");
 
+        $settings = new GeneralSettings();
+        $humo_option = $settings->get_humo_option($dbh);
+        $user = $settings->get_user_settings($dbh);
         // get tree from helper function
-        $db_functions = New db_functions;
+        $db_functions = New DbFunctions($dbh);
         $tree = $db_functions->get_tree($prefix);
         // Excludes private trees
         $hide_tree_array = explode(";", $user['group_hide_trees']);
@@ -219,11 +221,7 @@ class API {
             $pers_family=$pers_fams[0];
         }
 
-        if (CMS_SPECIFIC=='Joomla'){
-            $url='index.php?option=com_humo-gen&amp;task=family&amp;tree_id='.$pers_tree_id.'&amp;id='.$pers_family;
-            if ($pers_gedcomnumber) $url.='&amp;main_person='.$pers_gedcomnumber;
-        }
-        elseif ($humo_option["url_rewrite"]=="j"){
+        if ($humo_option["url_rewrite"]=="j"){
             // *** $uri_path made in header.php ***
             //$url=$uri_path.'family/'.$pers_tree_id.'/'.$pers_family.'/';
             //if ($pers_gedcomnumber) $url.=$pers_gedcomnumber.'/';
